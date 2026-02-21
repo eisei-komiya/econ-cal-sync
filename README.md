@@ -5,7 +5,7 @@ Google Calendar, powered by GitHub Actions.
 
 Data sources are **pluggable** — switch providers by setting a single
 environment variable.  The default source
-([Trading Economics](https://tradingeconomics.com/)) requires no API key.
+([ForexFactory](https://www.forexfactory.com/)) requires no API key.
 
 ---
 
@@ -20,7 +20,7 @@ is handled via `extendedProperties` so repeated runs are idempotent.
 
 | Name                  | Env var `EVENT_SOURCE`  | API key required? |
 |-----------------------|-------------------------|-------------------|
-| Trading Economics     | `trading_economics` *(default)* | No (`guest:guest`) |
+| ForexFactory          | `forexfactory` *(default)* | No              |
 | Financial Modeling Prep | `fmp`                 | Yes (`FMP_API_KEY`) |
 
 > Adding a new source only requires implementing a small fetcher class in
@@ -62,7 +62,7 @@ add the following secrets:
 | `GOOGLE_SA_JSON`    | The **full contents** of the service account JSON key file |
 | `GOOGLE_CALENDAR_ID`| The Calendar ID from step 2                              |
 
-> **Note:** The default data source (Trading Economics) requires no API key.
+> **Note:** The default data source (ForexFactory) requires no API key.
 > If you switch to a source that needs one, add it to Secrets and pass it
 > as an environment variable in the workflow.
 
@@ -75,7 +75,7 @@ Set the `EVENT_SOURCE` environment variable in
 
 ```yaml
 env:
-  EVENT_SOURCE: trading_economics   # change to another registered name
+  EVENT_SOURCE: forexfactory   # change to another registered name
 ```
 
 ---
@@ -132,6 +132,6 @@ src/
 └── fetchers/
     ├── __init__.py      # fetcher registry & get_fetcher()
     ├── base.py          # BaseFetcher ABC
-    ├── trading_economics.py
+    ├── forexfactory.py
     └── fmp.py
 ```
