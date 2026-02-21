@@ -92,8 +92,8 @@ immediately without waiting for the weekly schedule.
 Open `src/sync.py` and edit the constants near the top of the file:
 
 ```python
-# Full country names to include
-TARGET_COUNTRIES = {"United States", "Japan"}
+# Currency codes to include (ForexFactory uses currency codes as country identifiers)
+TARGET_COUNTRIES = {"USD", "JPY"}
 
 # Minimum importance level (1=Low, 2=Medium, 3=High)
 IMPORTANCE_MIN = 3
