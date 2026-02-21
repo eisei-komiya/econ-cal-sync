@@ -43,20 +43,8 @@ def build_calendar_service():
 def fetch_economic_events(api_key: str, date_from: str, date_to: str) -> list[dict]:
     """Fetch economic calendar events from Finnhub and return filtered list."""
     client = finnhub.Client(api_key=api_key)
-    data = client.economic_calendar()
-    # The SDK doesn't support date range filtering directly, so we filter manually.
-    # Fallback: use the raw endpoint if the SDK returns empty data.
+    data = client.calendar_economic(date_from, date_to)
     events = data.get("economicCalendar", []) if isinstance(data, dict) else []
-
-    if not events:
-        # Try via raw HTTP as a fallback
-        import urllib.parse
-        import urllib.request
-        params = urllib.parse.urlencode({"from": date_from, "to": date_to, "token": api_key})
-        url = f"https://finnhub.io/api/v1/calendar/economic?{params}"
-        with urllib.request.urlopen(url) as resp:  # noqa: S310
-            payload = json.loads(resp.read())
-        events = payload.get("economicCalendar", [])
 
     filtered = []
     for ev in events:
