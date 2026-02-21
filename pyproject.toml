@@ -1,0 +1,22 @@
+[project]
+name = "econ-cal-sync"
+version = "0.1.0"
+description = "Sync economic calendar events from ForexFactory to Google Calendar"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "google-api-python-client>=2.190.0",
+    "google-auth>=2.48.0",
+    "google-auth-httplib2>=0.3.0",
+]
+
+[project.optional-dependencies]
+scraping = [
+    "market-calendar-tool>=0.2.2",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
