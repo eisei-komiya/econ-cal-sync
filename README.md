@@ -20,7 +20,7 @@ is handled via `extendedProperties` so repeated runs are idempotent.
 
 | Name                  | Env var `EVENT_SOURCE`  | API key required? |
 |-----------------------|-------------------------|-------------------|
-| Trading Economics     | `trading_economics` *(default)* | No (`guest:guest`) |
+| Forex Factory         | `forexfactory` *(default)*      | No                 |
 | Financial Modeling Prep | `fmp`                 | Yes (`FMP_API_KEY`) |
 
 > Adding a new source only requires implementing a small fetcher class in
@@ -75,7 +75,7 @@ Set the `EVENT_SOURCE` environment variable in
 
 ```yaml
 env:
-  EVENT_SOURCE: trading_economics   # change to another registered name
+  EVENT_SOURCE: forexfactory   # change to another registered name
 ```
 
 ---
@@ -132,6 +132,6 @@ src/
 └── fetchers/
     ├── __init__.py      # fetcher registry & get_fetcher()
     ├── base.py          # BaseFetcher ABC
-    ├── trading_economics.py
+    ├── forexfactory.py
     └── fmp.py
 ```
