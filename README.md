@@ -1,28 +1,36 @@
 # econ-cal-sync
 
-Automated weekly sync of high/medium-impact economic calendar events from
-[Financial Modeling Prep (FMP)](https://site.financialmodelingprep.com/) into Google Calendar, powered by GitHub Actions.
+Automated weekly sync of high-impact economic calendar events into
+Google Calendar, powered by GitHub Actions.
+
+Data sources are **pluggable** — switch providers by setting a single
+environment variable.  The default source
+([Trading Economics](https://tradingeconomics.com/)) requires no API key.
 
 ---
 
 ## Overview
 
 Every Monday morning (07:00 JST) the workflow fetches the next 4 weeks of
-economic events for configurable countries (default: USD / JPY) from the
-FMP Economic Calendar API and upserts them into a Google Calendar using
-a service account.  Duplicate prevention is handled via `extendedProperties`
-so repeated runs are idempotent.
+economic events for configurable countries (default: US / JP) and upserts
+them into a Google Calendar using a service account.  Duplicate prevention
+is handled via `extendedProperties` so repeated runs are idempotent.
+
+### Supported data sources
+
+| Name                  | Env var `EVENT_SOURCE`  | API key required? |
+|-----------------------|-------------------------|-------------------|
+| Trading Economics     | `trading_economics` *(default)* | No (`guest:guest`) |
+| Financial Modeling Prep | `fmp`                 | Yes (`FMP_API_KEY`) |
+
+> Adding a new source only requires implementing a small fetcher class in
+> `src/fetchers/` — see [Adding a new data source](#adding-a-new-data-source).
 
 ---
 
 ## Setup
 
-### 1. FMP API key
-
-1. Sign up at <https://site.financialmodelingprep.com/register> (free tier is sufficient).
-2. Copy your API key from the dashboard.
-
-### 2. Google Cloud – Service Account & Calendar API
+### 1. Google Cloud – Service Account & Calendar API
 
 1. Open the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a new project (or use an existing one).
@@ -33,7 +41,7 @@ so repeated runs are idempotent.
 5. Generate a JSON key for the service account
    (*Keys → Add Key → Create new key → JSON*) and download it.
 
-### 3. Share your Google Calendar with the service account
+### 2. Share your Google Calendar with the service account
 
 1. Open [Google Calendar](https://calendar.google.com/) and find the target
    calendar.
@@ -44,16 +52,31 @@ so repeated runs are idempotent.
    `abc123@group.calendar.google.com` or your Gmail address for the primary
    calendar).
 
-### 4. Add GitHub Secrets
+### 3. Add GitHub Secrets
 
 In your repository go to **Settings → Secrets and variables → Actions** and
 add the following secrets:
 
 | Secret name         | Value                                                    |
 |---------------------|----------------------------------------------------------|
-| `FMP_API_KEY`       | Your FMP API key                                         |
 | `GOOGLE_SA_JSON`    | The **full contents** of the service account JSON key file |
-| `GOOGLE_CALENDAR_ID`| The Calendar ID from step 3                              |
+| `GOOGLE_CALENDAR_ID`| The Calendar ID from step 2                              |
+
+> **Note:** The default data source (Trading Economics) requires no API key.
+> If you switch to a source that needs one, add it to Secrets and pass it
+> as an environment variable in the workflow.
+
+---
+
+## Switching the data source
+
+Set the `EVENT_SOURCE` environment variable in
+`.github/workflows/sync.yml`:
+
+```yaml
+env:
+  EVENT_SOURCE: trading_economics   # change to another registered name
+```
 
 ---
 
@@ -69,11 +92,11 @@ immediately without waiting for the weekly schedule.
 Open `src/sync.py` and edit the constants near the top of the file:
 
 ```python
-# ISO-3166-1 alpha-2 country codes to include
-TARGET_COUNTRIES = ["US", "JP"]
+# Full country names to include
+TARGET_COUNTRIES = {"United States", "Japan"}
 
-# Impact levels to include ("high", "medium", "low")
-TARGET_IMPACTS = {"high", "medium"}
+# Minimum importance level (1=Low, 2=Medium, 3=High)
+IMPORTANCE_MIN = 3
 
 # How many weeks ahead to fetch
 FETCH_WEEKS = 4
@@ -81,3 +104,34 @@ FETCH_WEEKS = 4
 
 Add a matching entry to `COUNTRY_FLAG` if you add a new country so that the
 flag emoji appears in the event title.
+
+---
+
+## Adding a new data source
+
+1. Create `src/fetchers/my_source.py` with a class that extends `BaseFetcher`.
+2. Implement the `name` property and the `fetch()` method — return a list of
+   `EconomicEvent` (defined in `src/models.py`).
+3. Register it in `src/fetchers/__init__.py`:
+   ```python
+   from .my_source import MySourceFetcher
+   _FETCHERS["my_source"] = MySourceFetcher
+   ```
+4. Set `EVENT_SOURCE=my_source` in the workflow.
+
+---
+
+## Project structure
+
+```
+src/
+├── __init__.py
+├── __main__.py          # python -m src entry point
+├── sync.py              # main sync logic (source-agnostic)
+├── models.py            # EconomicEvent dataclass
+└── fetchers/
+    ├── __init__.py      # fetcher registry & get_fetcher()
+    ├── base.py          # BaseFetcher ABC
+    ├── trading_economics.py
+    └── fmp.py
+```

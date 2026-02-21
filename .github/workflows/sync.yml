@@ -24,8 +24,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run sync
-        run: python src/sync.py
+        run: python -m src
         env:
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}

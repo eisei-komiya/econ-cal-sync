@@ -1,3 +1,6 @@
 google-api-python-client>=2.190.0
 google-auth>=2.48.0
 google-auth-httplib2>=0.3.0
+
+# Optional: enables scraping ForexFactory for date ranges beyond "this week"
+# market-calendar-tool>=0.2.2
