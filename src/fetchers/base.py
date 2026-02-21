@@ -31,7 +31,7 @@ class BaseFetcher(ABC):
         date_from, date_to:
             ISO-8601 date strings (``YYYY-MM-DD``).
         countries:
-            Set of full country names to include (e.g. ``{"United States", "Japan"}``).
+            Set of currency codes to include (e.g. ``{"USD", "JPY"}``).
         importance_min:
             Minimum importance level (1=Low, 2=Medium, 3=High).
         """
