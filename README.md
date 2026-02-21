@@ -1,7 +1,7 @@
 # econ-cal-sync
 
 Automated weekly sync of high/medium-impact economic calendar events from
-[Finnhub](https://finnhub.io/) into Google Calendar, powered by GitHub Actions.
+[Financial Modeling Prep (FMP)](https://site.financialmodelingprep.com/) into Google Calendar, powered by GitHub Actions.
 
 ---
 
@@ -9,7 +9,7 @@ Automated weekly sync of high/medium-impact economic calendar events from
 
 Every Monday morning (07:00 JST) the workflow fetches the next 4 weeks of
 economic events for configurable countries (default: USD / JPY) from the
-Finnhub Economic Calendar API and upserts them into a Google Calendar using
+FMP Economic Calendar API and upserts them into a Google Calendar using
 a service account.  Duplicate prevention is handled via `extendedProperties`
 so repeated runs are idempotent.
 
@@ -17,9 +17,9 @@ so repeated runs are idempotent.
 
 ## Setup
 
-### 1. Finnhub API key
+### 1. FMP API key
 
-1. Sign up at <https://finnhub.io/> (free tier is sufficient).
+1. Sign up at <https://site.financialmodelingprep.com/register> (free tier is sufficient).
 2. Copy your API key from the dashboard.
 
 ### 2. Google Cloud – Service Account & Calendar API
@@ -51,7 +51,7 @@ add the following secrets:
 
 | Secret name         | Value                                                    |
 |---------------------|----------------------------------------------------------|
-| `FINNHUB_API_KEY`   | Your Finnhub API key                                     |
+| `FMP_API_KEY`       | Your FMP API key                                         |
 | `GOOGLE_SA_JSON`    | The **full contents** of the service account JSON key file |
 | `GOOGLE_CALENDAR_ID`| The Calendar ID from step 3                              |
 
