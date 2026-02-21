@@ -12,11 +12,11 @@ from googleapiclient.discovery import build
 # Configuration constants
 # ---------------------------------------------------------------------------
 TARGET_COUNTRIES = ["US", "JP"]   # ISO-3166-1 alpha-2 country codes to keep
-TARGET_IMPACTS = {"high", "medium"}
+TARGET_IMPACTS = {"high"}
 FETCH_WEEKS = 4                   # How many weeks ahead to fetch
 CALENDAR_TIMEZONE = "Asia/Tokyo"
 EVENT_DURATION_MINUTES = 30
-REMINDER_MINUTES = [60, 10]
+REMINDER_MINUTES = [40, 10]
 
 COUNTRY_FLAG = {
     "US": "🇺🇸",
