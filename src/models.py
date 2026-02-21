@@ -16,7 +16,7 @@ class EconomicEvent:
 
     id: str                          # Unique identifier (source-specific)
     name: str                        # e.g. "Non Farm Payrolls"
-    country: str                     # Full country name, e.g. "United States"
+    country: str                     # Currency code (e.g. "USD", "JPY")
     dt_utc: datetime | None          # Scheduled time in UTC (None → all-day)
     forecast: str                    # Consensus forecast value, or "N/A"
     previous: str                    # Previous period value, or "N/A"
