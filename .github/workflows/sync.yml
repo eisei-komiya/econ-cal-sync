@@ -17,6 +17,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
 
       - name: Run sync
         run: uv run python -m src

@@ -62,10 +62,12 @@ def _event_datetime(
         end_dt = ev.dt_utc + timedelta(minutes=duration_minutes)
         end = {"dateTime": end_dt.isoformat(), "timeZone": CALENDAR_TIMEZONE}
     else:
-        # All-day fallback
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        start = {"date": today}
-        end = {"date": today}
+        # All-day fallback: use an all-day event with an exclusive end date
+        today = datetime.now(timezone.utc).date()
+        start_date = today.isoformat()
+        end_date = (today + timedelta(days=1)).isoformat()
+        start = {"date": start_date}
+        end = {"date": end_date}
     return start, end
 
 
@@ -113,7 +115,6 @@ def get_existing_events(
                 calendarId=calendar_id,
                 timeMin=time_min,
                 timeMax=time_max,
-                privateExtendedProperty=_EXT_PROP_KEY,
                 singleEvents=True,
                 pageToken=page_token,
             )

@@ -12,7 +12,7 @@ environment variable.  The default source
 ## Overview
 
 Every Monday morning (07:00 JST) the workflow fetches the next 4 weeks of
-economic events for configurable countries (default: US / JP) and upserts
+economic events for configurable countries (default: `USD`, `JPY`, matching `TARGET_COUNTRIES`) and upserts
 them into a Google Calendar using a service account.  Duplicate prevention
 is handled via `extendedProperties` so repeated runs are idempotent.
 
