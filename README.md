@@ -1,137 +1,148 @@
 # econ-cal-sync
 
-Automated weekly sync of high-impact economic calendar events into
-Google Calendar, powered by GitHub Actions.
+> 🇺🇸 [English README is here](README-EN.md)
 
-Data sources are **pluggable** — switch providers by setting a single
-environment variable.  The default source
-([ForexFactory](https://www.forexfactory.com/)) requires no API key.
+GitHub Actions を使って、高重要度の経済指標イベントを毎週自動的に Google カレンダーへ同期するツールです。
 
----
-
-## Overview
-
-Every Monday morning (07:00 JST) the workflow fetches the next 4 weeks of
-economic events for configurable countries (default: `USD`, `JPY`, matching `TARGET_COUNTRIES`) and upserts
-them into a Google Calendar using a service account.  Duplicate prevention
-is handled via `extendedProperties` so repeated runs are idempotent.
-
-### Supported data sources
-
-| Name                  | Env var `EVENT_SOURCE`  | API key required? |
-|-----------------------|-------------------------|-------------------|
-| Forex Factory         | `forexfactory` *(default)*      | No                 |
-| Financial Modeling Prep | `fmp`                 | Yes (`FMP_API_KEY`) |
-
-> Adding a new source only requires implementing a small fetcher class in
-> `src/fetchers/` — see [Adding a new data source](#adding-a-new-data-source).
+データソースは**プラガブル**設計で、環境変数ひとつで切り替え可能です。デフォルトのデータソース（[ForexFactory](https://www.forexfactory.com/)）は API キー不要で使えます。
 
 ---
 
-## Setup
+## 概要
 
-### 1. Google Cloud – Service Account & Calendar API
+毎週月曜日の朝 7:00 JST（日曜 22:00 UTC）にワークフローが起動し、設定した国・通貨（デフォルト: `USD`・`JPY`）の今後 4 週間分の経済指標イベントを取得して Google カレンダーへ upsert します。`extendedProperties` を使った重複チェックにより、同じイベントを何度登録しても冪等に動作します。
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new project (or use an existing one).
-3. Enable the **Google Calendar API** for the project
-   (*APIs & Services → Library → search "Google Calendar API"*).
-4. Create a **Service Account**
-   (*IAM & Admin → Service Accounts → Create Service Account*).
-5. Generate a JSON key for the service account
-   (*Keys → Add Key → Create new key → JSON*) and download it.
+### 対応データソース
 
-### 2. Share your Google Calendar with the service account
+| 名称                    | 環境変数 `EVENT_SOURCE`         | API キー |
+|-------------------------|---------------------------------|----------|
+| Forex Factory           | `forexfactory` *(デフォルト)*   | 不要     |
+| Financial Modeling Prep | `fmp`                           | 必要 (`FMP_API_KEY`) |
 
-1. Open [Google Calendar](https://calendar.google.com/) and find the target
-   calendar.
-2. Go to **Settings → Share with specific people**.
-3. Add the service account's email address (ends with
-   `@<project>.iam.gserviceaccount.com`) and grant it the **Editor** role.
-4. Note the **Calendar ID** shown under *Integrate calendar* (looks like
-   `abc123@group.calendar.google.com` or your Gmail address for the primary
-   calendar).
-
-### 3. Add GitHub Secrets
-
-In your repository go to **Settings → Secrets and variables → Actions** and
-add the following secrets:
-
-| Secret name         | Value                                                    |
-|---------------------|----------------------------------------------------------|
-| `GOOGLE_SA_JSON`    | The **full contents** of the service account JSON key file |
-| `GOOGLE_CALENDAR_ID`| The Calendar ID from step 2                              |
-
-> **Note:** The default data source (ForexFactory) requires no API key.
-> If you switch to a source that needs one, add it to Secrets and pass it
-> as an environment variable in the workflow.
+> 新しいデータソースを追加するには `src/fetchers/` に小さなフェッチャークラスを実装するだけです。  
+> → [新しいデータソースの追加方法](#新しいデータソースの追加方法)
 
 ---
 
-## Switching the data source
+## 技術スタック
 
-Set the `EVENT_SOURCE` environment variable in
-`.github/workflows/sync.yml`:
+| 区分               | 技術                                                                                          |
+|--------------------|-----------------------------------------------------------------------------------------------|
+| 言語               | Python 3.14+                                                                                  |
+| パッケージマネージャ | [uv](https://docs.astral.sh/uv/)                                                             |
+| CI / 自動化        | [GitHub Actions](https://docs.github.com/en/actions)                                         |
+| カレンダー API     | [Google Calendar API v3](https://developers.google.com/calendar/api/guides/overview)          |
+| 認証               | Google サービスアカウント（`google-auth` 使用）                                               |
+| デフォルトデータソース | [ForexFactory](https://www.forexfactory.com/)（`market-calendar-tool` による HTML スクレイピング） |
+| オプションデータソース | [Financial Modeling Prep API](https://financialmodelingprep.com/)                         |
+
+---
+
+## 自分の環境で使うには
+
+### 1. リポジトリをフォークする
+
+1. このリポジトリページ右上の **Fork** ボタンをクリックします。
+2. 必要に応じてローカルにクローンします（以降の手順は GitHub の Web UI だけでも完結します）。
+
+### 2. Google Cloud – サービスアカウントと Calendar API の設定
+
+1. [Google Cloud Console](https://console.cloud.google.com/) を開きます。
+2. 新しいプロジェクトを作成するか、既存のプロジェクトを選択します。
+3. **Google Calendar API** を有効化します  
+   （*APIs & Services → Library → 「Google Calendar API」で検索*）。
+4. **サービスアカウント**を作成します  
+   （*IAM & Admin → Service Accounts → Create Service Account*）。
+5. サービスアカウントの JSON キーを生成してダウンロードします  
+   （*Keys → Add Key → Create new key → JSON*）。
+
+### 3. Google カレンダーをサービスアカウントと共有する
+
+1. [Google カレンダー](https://calendar.google.com/) を開き、対象のカレンダーの設定画面へ移動します。
+2. **設定 → 特定のユーザーと共有** を選択します。
+3. サービスアカウントのメールアドレス（`@<project>.iam.gserviceaccount.com` で終わる形式）を追加し、ロールを **「予定の変更」（Editor）** に設定します。
+4. *カレンダーを統合* 欄に表示される **カレンダー ID** を控えておきます  
+   （例: `abc123@group.calendar.google.com` や Gmailアドレス）。
+
+### 4. GitHub Secrets を設定する
+
+フォーク先のリポジトリで **Settings → Secrets and variables → Actions** へ進み、以下のシークレットを追加します：
+
+| シークレット名       | 値                                                          |
+|----------------------|-------------------------------------------------------------|
+| `GOOGLE_SA_JSON`     | ダウンロードしたサービスアカウント JSON ファイルの**全内容** |
+| `GOOGLE_CALENDAR_ID` | 手順 3 で控えたカレンダー ID                                |
+
+> **メモ:** デフォルトのデータソース（ForexFactory）は API キー不要です。  
+> 別のデータソースに切り替える場合は、対応する API キーをシークレットに追加し、ワークフローの環境変数として渡してください。
+
+### 5. GitHub Actions を有効化する
+
+フォーク後、GitHub Actions のワークフローがデフォルトで無効になっている場合があります。  
+フォーク先の **Actions** タブを開き、**「I understand my workflows, go ahead and enable them」** をクリックして有効化してください。
+
+---
+
+## データソースの切り替え
+
+`.github/workflows/sync.yml` の `EVENT_SOURCE` 環境変数を変更します：
 
 ```yaml
 env:
-  EVENT_SOURCE: forexfactory   # change to another registered name
+  EVENT_SOURCE: forexfactory   # 別の登録済みソース名に変更
 ```
 
 ---
 
-## Manual trigger
+## 手動実行
 
-Go to **Actions → Sync Economic Calendar → Run workflow** to trigger a run
-immediately without waiting for the weekly schedule.
+**Actions → Sync Economic Calendar → Run workflow** から、スケジュールを待たずにすぐ実行できます。
 
 ---
 
-## Customisation
+## カスタマイズ
 
-Open `src/sync.py` and edit the constants near the top of the file:
+`src/sync.py` の先頭付近にある定数を編集します：
 
 ```python
-# Currency codes to include (ForexFactory uses currency codes as country identifiers)
+# 対象国の通貨コード（ForexFactory は通貨コードで国を識別します）
 TARGET_COUNTRIES = {"USD", "JPY"}
 
-# Minimum importance level (1=Low, 2=Medium, 3=High)
+# 最低重要度（1=低, 2=中, 3=高）
 IMPORTANCE_MIN = 3
 
-# How many weeks ahead to fetch
+# 何週間先まで取得するか
 FETCH_WEEKS = 4
 ```
 
-Add a matching entry to `COUNTRY_FLAG` if you add a new country so that the
-flag emoji appears in the event title.
+新しい国を追加する場合は、`COUNTRY_FLAG` にも対応するフラグ絵文字を追加してください。
 
 ---
 
-## Adding a new data source
+## 新しいデータソースの追加方法
 
-1. Create `src/fetchers/my_source.py` with a class that extends `BaseFetcher`.
-2. Implement the `name` property and the `fetch()` method — return a list of
-   `EconomicEvent` (defined in `src/models.py`).
-3. Register it in `src/fetchers/__init__.py`:
+1. `src/fetchers/my_source.py` に `BaseFetcher` を継承したクラスを作成します。
+2. `name` プロパティと `fetch()` メソッドを実装し、`EconomicEvent`（`src/models.py` 定義）のリストを返すようにします。
+3. `src/fetchers/__init__.py` に登録します：
    ```python
    from .my_source import MySourceFetcher
    _FETCHERS["my_source"] = MySourceFetcher
    ```
-4. Set `EVENT_SOURCE=my_source` in the workflow.
+4. ワークフローで `EVENT_SOURCE=my_source` を設定します。
 
 ---
 
-## Project structure
+## プロジェクト構成
 
 ```
 src/
 ├── __init__.py
-├── __main__.py          # python -m src entry point
-├── sync.py              # main sync logic (source-agnostic)
-├── models.py            # EconomicEvent dataclass
+├── __main__.py          # python -m src エントリポイント
+├── sync.py              # メイン同期ロジック（データソース非依存）
+├── models.py            # EconomicEvent データクラス
 └── fetchers/
-    ├── __init__.py      # fetcher registry & get_fetcher()
-    ├── base.py          # BaseFetcher ABC
+    ├── __init__.py      # フェッチャーレジストリ & get_fetcher()
+    ├── base.py          # BaseFetcher 抽象基底クラス
     ├── forexfactory.py
     └── fmp.py
 ```
