@@ -174,6 +174,7 @@ class ForexFactoryFetcher(BaseFetcher):
     @classmethod
     def _normalise(cls, raw: dict, dt_utc: datetime) -> EconomicEvent:
         title = (raw.get("title") or raw.get("event") or "Economic Event").strip()
+        importance = _IMPACT_MAP.get((raw.get("impact") or "").lower(), 0)
         return EconomicEvent(
             id=cls._make_id(raw),
             name=title,
@@ -183,4 +184,5 @@ class ForexFactoryFetcher(BaseFetcher):
             forecast=raw.get("forecast") or "N/A",
             previous=raw.get("previous") or "N/A",
             actual=raw.get("actual") or "N/A",
+            importance=importance,
         )

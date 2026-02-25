@@ -22,7 +22,7 @@ from .models import EconomicEvent
 # ---------------------------------------------------------------------------
 # ForexFactory uses currency codes (e.g. "USD", "JPY") as country identifiers.
 TARGET_COUNTRIES = {"USD", "JPY"}
-IMPORTANCE_MIN = 3                # 1=Low, 2=Medium, 3=High
+IMPORTANCE_MIN = 2                # 1=Low, 2=Medium, 3=High
 FETCH_WEEKS = 4                   # How many weeks ahead to fetch
 CALENDAR_TIMEZONE = "Asia/Tokyo"
 EVENT_DURATION_MINUTES = 30
@@ -31,6 +31,18 @@ REMINDER_MINUTES = [40, 10]
 COUNTRY_FLAG: dict[str, str] = {
     "USD": "🇺🇸",
     "JPY": "🇯🇵",
+}
+
+# Google Calendar colorId: 11=Tomato (red) for High, 5=Banana (yellow) for Medium
+_IMPORTANCE_COLOR: dict[int, str] = {
+    3: "11",  # High  → Tomato (red)
+    2: "5",   # Medium → Banana (yellow)
+}
+
+# ★ marks appended to the event title to indicate importance
+_IMPORTANCE_STARS: dict[int, str] = {
+    3: "★★★",  # High
+    2: "★★",   # Medium
 }
 
 # Extended property key used for de-duplication in Google Calendar.
@@ -72,10 +84,11 @@ def _event_datetime(
 def build_gcal_event(ev: EconomicEvent) -> dict:
     """Convert a normalised :class:`EconomicEvent` to a Google Calendar event body."""
     flag = COUNTRY_FLAG.get(ev.country, "")
+    stars = _IMPORTANCE_STARS.get(ev.importance, "")
     start, end = _event_datetime(ev, EVENT_DURATION_MINUTES)
 
-    return {
-        "summary": f"{flag} {ev.name}".strip(),
+    gcal: dict = {
+        "summary": f"{flag} {stars} {ev.name}".strip(),
         "description": (
             f"Forecast: {ev.forecast}\n"
             f"Previous: {ev.previous}\n"
@@ -95,6 +108,10 @@ def build_gcal_event(ev: EconomicEvent) -> dict:
             }
         },
     }
+    color_id = _IMPORTANCE_COLOR.get(ev.importance)
+    if color_id:
+        gcal["colorId"] = color_id
+    return gcal
 
 
 def get_existing_events(
