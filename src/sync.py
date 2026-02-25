@@ -195,8 +195,10 @@ def main() -> None:
     print(f"Found {len(events)} matching events after filtering.")
 
     if not events:
-        print("No events to sync.")
-        return
+        raise RuntimeError(
+            "No events retrieved from the data source. "
+            "Check source connectivity and filters."
+        )
 
     service = build_calendar_service()
     existing = get_existing_events(service, calendar_id, date_from, date_to)

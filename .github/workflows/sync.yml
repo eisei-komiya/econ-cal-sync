@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 22 * * 0"   # Sunday 22:00 UTC = Monday 07:00 JST
   workflow_dispatch:
+  push:
+    branches:
+      - copilot/fix-workflow-data-retrieval
 
 jobs:
   sync:
@@ -18,10 +21,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Run sync
-        run: uv run --frozen python -m src
+        run: uv run --frozen --extra scraping python -m src
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
