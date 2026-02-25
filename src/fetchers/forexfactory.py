@@ -90,7 +90,11 @@ class ForexFactoryFetcher(BaseFetcher):
         """Download the official FF this-week JSON."""
         try:
             req = urllib.request.Request(
-                _FF_JSON_URL, headers={"Accept": "application/json"},
+                _FF_JSON_URL,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0 (compatible; econ-cal-sync/0.1)",
+                },
             )
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 data = json.loads(resp.read())

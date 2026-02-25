@@ -21,7 +21,7 @@ jobs:
           python-version: "3.14"
 
       - name: Run sync
-        run: uv run --frozen python -m src
+        run: uv run --frozen --extra scraping python -m src
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
