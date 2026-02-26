@@ -88,7 +88,7 @@ def build_gcal_event(ev: EconomicEvent) -> dict:
     start, end = _event_datetime(ev, EVENT_DURATION_MINUTES)
 
     gcal: dict = {
-        "summary": f"{flag} {stars} {ev.name}".strip(),
+        "summary": " ".join(filter(None, [flag, stars, ev.name])).strip(),
         "description": (
             f"Forecast: {ev.forecast}\n"
             f"Previous: {ev.previous}\n"

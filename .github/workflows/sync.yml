@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "0 22 * * 0"   # Sunday 22:00 UTC = Monday 07:00 JST
   workflow_dispatch:
-  push:
-    branches:
-      - copilot/fix-workflow-data-retrieval
 
 jobs:
   sync:
