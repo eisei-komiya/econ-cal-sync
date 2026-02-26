@@ -23,6 +23,8 @@ class EconomicEvent:
     previous: str                    # Previous period value, or "N/A"
     actual: str                      # Actual (released) value, or "N/A"
 
+    importance: int = 0              # Numeric impact level: 1=Low, 2=Medium, 3=High
+
     # Optional extra fields – fetchers may leave them as empty strings.
     source_url: str = ""             # Link to the official source
     category: str = ""               # e.g. "Interest Rate"

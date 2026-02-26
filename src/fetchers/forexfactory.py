@@ -90,7 +90,11 @@ class ForexFactoryFetcher(BaseFetcher):
         """Download the official FF this-week JSON."""
         try:
             req = urllib.request.Request(
-                _FF_JSON_URL, headers={"Accept": "application/json"},
+                _FF_JSON_URL,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0 (compatible; econ-cal-sync/0.1)",
+                },
             )
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 data = json.loads(resp.read())
@@ -174,6 +178,7 @@ class ForexFactoryFetcher(BaseFetcher):
     @classmethod
     def _normalise(cls, raw: dict, dt_utc: datetime) -> EconomicEvent:
         title = (raw.get("title") or raw.get("event") or "Economic Event").strip()
+        importance = _IMPACT_MAP.get((raw.get("impact") or "").lower(), 0)
         return EconomicEvent(
             id=cls._make_id(raw),
             name=title,
@@ -183,4 +188,5 @@ class ForexFactoryFetcher(BaseFetcher):
             forecast=raw.get("forecast") or "N/A",
             previous=raw.get("previous") or "N/A",
             actual=raw.get("actual") or "N/A",
+            importance=importance,
         )

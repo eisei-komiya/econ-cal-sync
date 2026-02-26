@@ -13,7 +13,12 @@ import pytest
 
 from src.fetchers.forexfactory import ForexFactoryFetcher
 from src.models import EconomicEvent
-from src.sync import _EXT_PROP_KEY, build_gcal_event
+from src.sync import (
+    _EXT_PROP_KEY,
+    _IMPORTANCE_COLOR,
+    _IMPORTANCE_STARS,
+    build_gcal_event,
+)
 
 # -----------------------------------------------------------------------
 # Fixtures / sample data
@@ -221,3 +226,89 @@ class TestBuildGcalEvent:
         assert "dateTime" not in gcal["start"]
         assert gcal["start"]["date"] == "2026-02-16"
         assert gcal["end"]["date"] == "2026-02-17"
+
+    def test_high_impact_has_stars_and_color(self) -> None:
+        ev = EconomicEvent(
+            id="test_high",
+            name="Non Farm Payrolls",
+            country="USD",
+            dt_utc=datetime(2026, 2, 20, 13, 30, tzinfo=timezone.utc),
+            event_date=date(2026, 2, 20),
+            forecast="180K",
+            previous="256K",
+            actual="N/A",
+            importance=3,
+        )
+        gcal = build_gcal_event(ev)
+        assert _IMPORTANCE_STARS[3] in gcal["summary"]
+        assert gcal.get("colorId") == _IMPORTANCE_COLOR[3]
+
+    def test_medium_impact_has_stars_and_color(self) -> None:
+        ev = EconomicEvent(
+            id="test_medium",
+            name="Empire State Manufacturing Index",
+            country="USD",
+            dt_utc=datetime(2026, 2, 17, 13, 30, tzinfo=timezone.utc),
+            event_date=date(2026, 2, 17),
+            forecast="6.4",
+            previous="7.7",
+            actual="N/A",
+            importance=2,
+        )
+        gcal = build_gcal_event(ev)
+        assert _IMPORTANCE_STARS[2] in gcal["summary"]
+        assert gcal.get("colorId") == _IMPORTANCE_COLOR[2]
+
+    def test_low_impact_has_no_stars_no_color(self) -> None:
+        ev = EconomicEvent(
+            id="test_low",
+            name="Some Minor Event",
+            country="USD",
+            dt_utc=datetime(2026, 2, 17, 13, 30, tzinfo=timezone.utc),
+            event_date=date(2026, 2, 17),
+            forecast="N/A",
+            previous="N/A",
+            actual="N/A",
+            importance=1,
+        )
+        gcal = build_gcal_event(ev)
+        assert "★" not in gcal["summary"]
+        assert "colorId" not in gcal
+
+
+class TestForexFactoryFetcherImportance:
+    """Tests that ForexFactory fetcher stores importance level in EconomicEvent."""
+
+    def test_high_importance_stored(self, fetcher: ForexFactoryFetcher) -> None:
+        with patch.object(fetcher, "_fetch_ff_json", return_value=SAMPLE_FF_JSON), \
+             patch.object(fetcher, "_fetch_mct", return_value=[]):
+            events = fetcher.fetch(
+                "2026-02-15", "2026-02-21",
+                countries={"USD"},
+                importance_min=3,
+            )
+        nfp = [ev for ev in events if ev.name == "Non Farm Payrolls"][0]
+        assert nfp.importance == 3
+
+    def test_medium_importance_stored(self, fetcher: ForexFactoryFetcher) -> None:
+        with patch.object(fetcher, "_fetch_ff_json", return_value=SAMPLE_FF_JSON), \
+             patch.object(fetcher, "_fetch_mct", return_value=[]):
+            events = fetcher.fetch(
+                "2026-02-15", "2026-02-21",
+                countries={"USD"},
+                importance_min=2,
+            )
+        empire = [ev for ev in events if ev.name == "Empire State Manufacturing Index"][0]
+        assert empire.importance == 2
+
+    def test_medium_included_when_importance_min_2(self, fetcher: ForexFactoryFetcher) -> None:
+        with patch.object(fetcher, "_fetch_ff_json", return_value=SAMPLE_FF_JSON), \
+             patch.object(fetcher, "_fetch_mct", return_value=[]):
+            events = fetcher.fetch(
+                "2026-02-15", "2026-02-21",
+                countries={"USD"},
+                importance_min=2,
+            )
+        names = {ev.name for ev in events}
+        assert "Empire State Manufacturing Index" in names
+        assert "Non Farm Payrolls" in names
