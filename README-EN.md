@@ -78,14 +78,18 @@ is handled via `extendedProperties` so repeated runs are idempotent.
 In your forked repository go to **Settings → Secrets and variables → Actions** and
 add the following secrets:
 
-| Secret name          | Value                                                      |
-|----------------------|------------------------------------------------------------|
-| `GOOGLE_SA_JSON`     | The **full contents** of the service account JSON key file |
-| `GOOGLE_CALENDAR_ID` | The Calendar ID from step 3                                |
+| Secret name             | Value                                                      |
+|------------------------|------------------------------------------------------------|
+| `GOOGLE_SA_JSON`       | The **full contents** of the service account JSON key file |
+| `GOOGLE_CALENDAR_ID`   | The Calendar ID from step 3                                |
+| `CALENDAR_OWNER_EMAIL` | Your Google account email address (the account that receives notifications) |
 
 > **Note:** The default data source (ForexFactory) requires no API key.
 > If you switch to a source that needs one, add it to Secrets and pass it
 > as an environment variable in the workflow.
+
+> **⚠️ Notification timing:** Setting `CALENDAR_OWNER_EMAIL` alone does not configure the reminder times (40 min / 10 min before). Due to a Google Calendar API limitation, notification timing for invited events follows the user's own calendar settings.  
+> **Please set your reminders manually in Google Calendar:** Settings (⚙️) → select the calendar → Notifications → add 40 and 10 minutes.
 
 ### 5. Enable GitHub Actions
 
