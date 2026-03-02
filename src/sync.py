@@ -100,6 +100,8 @@ def build_gcal_event(ev: EconomicEvent) -> dict:
             "useDefault": False,
             "overrides": [
                 {"method": "popup", "minutes": m} for m in REMINDER_MINUTES
+            ] + [
+                {"method": "email", "minutes": m} for m in REMINDER_MINUTES
             ],
         },
         "extendedProperties": {

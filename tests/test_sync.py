@@ -312,3 +312,45 @@ class TestForexFactoryFetcherImportance:
         names = {ev.name for ev in events}
         assert "Empire State Manufacturing Index" in names
         assert "Non Farm Payrolls" in names
+
+
+class TestReminders:
+    """Tests that Google Calendar events include both popup and email reminders."""
+
+    def _make_event(self) -> dict:
+        from src.models import EconomicEvent
+        from src.sync import build_gcal_event, REMINDER_MINUTES
+        ev = EconomicEvent(
+            id="test_reminder",
+            name="Non Farm Payrolls",
+            country="USD",
+            dt_utc=datetime(2026, 2, 20, 13, 30, tzinfo=timezone.utc),
+            event_date=date(2026, 2, 20),
+            forecast="180K",
+            previous="256K",
+            actual="N/A",
+            importance=3,
+        )
+        return build_gcal_event(ev), REMINDER_MINUTES
+
+    def test_reminders_not_default(self) -> None:
+        gcal, _ = self._make_event()
+        assert gcal["reminders"]["useDefault"] is False
+
+    def test_popup_reminders_present(self) -> None:
+        gcal, reminder_minutes = self._make_event()
+        overrides = gcal["reminders"]["overrides"]
+        popup_minutes = {r["minutes"] for r in overrides if r["method"] == "popup"}
+        assert popup_minutes == set(reminder_minutes)
+
+    def test_email_reminders_present(self) -> None:
+        gcal, reminder_minutes = self._make_event()
+        overrides = gcal["reminders"]["overrides"]
+        email_minutes = {r["minutes"] for r in overrides if r["method"] == "email"}
+        assert email_minutes == set(reminder_minutes)
+
+    def test_both_methods_included(self) -> None:
+        gcal, _ = self._make_event()
+        methods = {r["method"] for r in gcal["reminders"]["overrides"]}
+        assert "popup" in methods
+        assert "email" in methods
