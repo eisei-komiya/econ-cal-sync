@@ -312,3 +312,56 @@ class TestForexFactoryFetcherImportance:
         names = {ev.name for ev in events}
         assert "Empire State Manufacturing Index" in names
         assert "Non Farm Payrolls" in names
+
+
+class TestReminders:
+    """Tests that Google Calendar events include popup reminders and optional attendee."""
+
+    def _make_ev(self) -> "EconomicEvent":
+        return EconomicEvent(
+            id="test_reminder",
+            name="Non Farm Payrolls",
+            country="USD",
+            dt_utc=datetime(2026, 2, 20, 13, 30, tzinfo=timezone.utc),
+            event_date=date(2026, 2, 20),
+            forecast="180K",
+            previous="256K",
+            actual="N/A",
+            importance=3,
+        )
+
+    def test_reminders_not_default(self) -> None:
+        from src.sync import build_gcal_event
+        gcal = build_gcal_event(self._make_ev())
+        assert gcal["reminders"]["useDefault"] is False
+
+    def test_popup_reminders_present(self) -> None:
+        from src.sync import build_gcal_event, REMINDER_MINUTES
+        gcal = build_gcal_event(self._make_ev())
+        overrides = gcal["reminders"]["overrides"]
+        popup_minutes = {r["minutes"] for r in overrides if r["method"] == "popup"}
+        assert popup_minutes == set(REMINDER_MINUTES)
+
+    def test_no_attendees_without_owner_email(self) -> None:
+        """Without owner_email, attendees should not be set."""
+        from src.sync import build_gcal_event
+        gcal = build_gcal_event(self._make_ev())
+        assert "attendees" not in gcal
+
+    def test_attendee_added_with_owner_email(self) -> None:
+        """With owner_email, owner should appear as an accepted attendee."""
+        from src.sync import build_gcal_event
+        gcal = build_gcal_event(self._make_ev(), owner_email="owner@example.com")
+        assert "attendees" in gcal
+        assert gcal["attendees"][0]["email"] == "owner@example.com"
+        assert gcal["attendees"][0]["responseStatus"] == "accepted"
+
+    def test_reminders_still_present_with_owner_email(self) -> None:
+        """Popup reminders must be set even when owner_email is provided."""
+        from src.sync import build_gcal_event, REMINDER_MINUTES
+        gcal = build_gcal_event(self._make_ev(), owner_email="owner@example.com")
+        assert gcal["reminders"]["useDefault"] is False
+        popup_minutes = {
+            r["minutes"] for r in gcal["reminders"]["overrides"] if r["method"] == "popup"
+        }
+        assert popup_minutes == set(REMINDER_MINUTES)

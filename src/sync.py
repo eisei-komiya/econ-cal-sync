@@ -81,8 +81,17 @@ def _event_datetime(
     return start, end
 
 
-def build_gcal_event(ev: EconomicEvent) -> dict:
-    """Convert a normalised :class:`EconomicEvent` to a Google Calendar event body."""
+def build_gcal_event(ev: EconomicEvent, owner_email: str | None = None) -> dict:
+    """Convert a normalised :class:`EconomicEvent` to a Google Calendar event body.
+
+    Args:
+        ev: The economic event to convert.
+        owner_email: Optional calendar owner email address.  When provided, the
+            owner is added as an attendee so that Google Calendar delivers
+            reminders to their account (service-account-created events only
+            deliver reminders to the service account itself unless the owner is
+            explicitly listed as an attendee).
+    """
     flag = COUNTRY_FLAG.get(ev.country, "")
     stars = _IMPORTANCE_STARS.get(ev.importance, "")
     start, end = _event_datetime(ev, EVENT_DURATION_MINUTES)
@@ -111,6 +120,13 @@ def build_gcal_event(ev: EconomicEvent) -> dict:
     color_id = _IMPORTANCE_COLOR.get(ev.importance)
     if color_id:
         gcal["colorId"] = color_id
+
+    # Add the calendar owner as an attendee so that Google Calendar delivers
+    # popup reminders to their account.  Without this, reminders only fire for
+    # the service account that created the event.
+    if owner_email:
+        gcal["attendees"] = [{"email": owner_email, "responseStatus": "accepted"}]
+
     return gcal
 
 
@@ -177,6 +193,10 @@ def upsert_event(
 def main() -> None:
     calendar_id = os.environ["GOOGLE_CALENDAR_ID"]
     source_name = os.environ.get("EVENT_SOURCE", "forexfactory")
+    # Optional: calendar owner email for attendee-based reminder delivery.
+    # Service-account-created events only fire reminders for the service account
+    # unless the calendar owner is explicitly listed as an attendee.
+    owner_email = os.environ.get("CALENDAR_OWNER_EMAIL") or None
 
     fetcher = get_fetcher(source_name)
     print(f"Using data source: {fetcher.name}")
@@ -206,7 +226,7 @@ def main() -> None:
 
     created = updated = 0
     for ev in events:
-        gcal_event = build_gcal_event(ev)
+        gcal_event = build_gcal_event(ev, owner_email=owner_email)
         action = upsert_event(service, calendar_id, gcal_event, existing)
         if action == "created":
             created += 1
