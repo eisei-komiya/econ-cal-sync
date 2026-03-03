@@ -169,21 +169,30 @@ def get_existing_events(
 def upsert_event(
     service, calendar_id: str, gcal_event: dict, existing: dict[str, str],
 ) -> str:
-    """Create or update a Google Calendar event.  Returns ``'created'`` or ``'updated'``."""
+    """Create or update a Google Calendar event.
+
+    Returns ``'created'``, ``'updated'``, or ``'failed'``.  On API error the
+    exception is logged and ``'failed'`` is returned so that the caller can
+    continue processing the remaining events instead of aborting the entire run.
+    """
     eid = gcal_event["extendedProperties"]["private"][_EXT_PROP_KEY]
-    if eid in existing:
-        service.events().update(
-            calendarId=calendar_id,
-            eventId=existing[eid],
-            body=gcal_event,
-        ).execute()
-        return "updated"
-    else:
-        service.events().insert(
-            calendarId=calendar_id,
-            body=gcal_event,
-        ).execute()
-        return "created"
+    try:
+        if eid in existing:
+            service.events().update(
+                calendarId=calendar_id,
+                eventId=existing[eid],
+                body=gcal_event,
+            ).execute()
+            return "updated"
+        else:
+            service.events().insert(
+                calendarId=calendar_id,
+                body=gcal_event,
+            ).execute()
+            return "created"
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [failed] {gcal_event.get('summary', eid)}: {exc}")
+        return "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -224,17 +233,25 @@ def main() -> None:
     existing = get_existing_events(service, calendar_id, date_from, date_to)
     print(f"Found {len(existing)} existing events in Google Calendar.")
 
-    created = updated = 0
+    created = updated = failed = 0
     for ev in events:
         gcal_event = build_gcal_event(ev, owner_email=owner_email)
         action = upsert_event(service, calendar_id, gcal_event, existing)
         if action == "created":
             created += 1
-        else:
+        elif action == "updated":
             updated += 1
-        print(f"  [{action}] {gcal_event['summary']}")
+        else:
+            failed += 1
+        if action != "failed":
+            print(f"  [{action}] {gcal_event['summary']}")
 
-    print(f"Done. Created: {created}, Updated: {updated}")
+    print(f"Done. Created: {created}, Updated: {updated}, Failed: {failed}")
+    if failed:
+        raise RuntimeError(
+            f"{failed} event(s) could not be upserted. "
+            "Check the logs above for details."
+        )
 
 
 if __name__ == "__main__":

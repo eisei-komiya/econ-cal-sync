@@ -365,3 +365,64 @@ class TestReminders:
             r["minutes"] for r in gcal["reminders"]["overrides"] if r["method"] == "popup"
         }
         assert popup_minutes == set(REMINDER_MINUTES)
+
+
+class TestUpsertEvent:
+    """Tests for upsert_event error handling."""
+
+    def _make_gcal_event(self, eid: str = "test_event_id") -> dict:
+        return {
+            "summary": "Test Event",
+            "extendedProperties": {"private": {"econ_event_id": eid}},
+        }
+
+    def test_upsert_creates_new_event(self) -> None:
+        """When the event id is not in existing, insert is called."""
+        from src.sync import upsert_event
+        service = MagicMock()
+
+        result = upsert_event(service, "cal_id", self._make_gcal_event(), existing={})
+
+        assert result == "created"
+        service.events().insert.assert_called_once_with(
+            calendarId="cal_id",
+            body=self._make_gcal_event(),
+        )
+
+    def test_upsert_updates_existing_event(self) -> None:
+        """When the event id is in existing, update is called."""
+        from src.sync import upsert_event
+        service = MagicMock()
+
+        result = upsert_event(
+            service, "cal_id", self._make_gcal_event(), existing={"test_event_id": "gcal_123"}
+        )
+
+        assert result == "updated"
+        service.events().update.assert_called_once_with(
+            calendarId="cal_id",
+            eventId="gcal_123",
+            body=self._make_gcal_event(),
+        )
+
+    def test_upsert_returns_failed_on_api_error(self) -> None:
+        """When the API call raises an exception, 'failed' is returned (not re-raised)."""
+        from src.sync import upsert_event
+        service = MagicMock()
+        service.events().insert().execute.side_effect = Exception("API quota exceeded")
+
+        result = upsert_event(service, "cal_id", self._make_gcal_event(), existing={})
+
+        assert result == "failed"
+
+    def test_upsert_update_returns_failed_on_api_error(self) -> None:
+        """When update raises, 'failed' is returned without re-raising."""
+        from src.sync import upsert_event
+        service = MagicMock()
+        service.events().update().execute.side_effect = RuntimeError("503 Service Unavailable")
+
+        result = upsert_event(
+            service, "cal_id", self._make_gcal_event(), existing={"test_event_id": "gcal_123"}
+        )
+
+        assert result == "failed"
