@@ -527,3 +527,86 @@ class TestGetExistingEvents:
         result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
 
         assert result == {"ev2": "gcal2"}
+
+
+class TestValidateFFJsonSchema:
+    """Tests for ForexFactoryFetcher._validate_ff_json_schema."""
+
+    def test_no_warning_when_data_is_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Empty list → no output."""
+        ForexFactoryFetcher._validate_ff_json_schema([])
+        assert capsys.readouterr().out == ""
+
+    def test_no_warning_when_all_required_keys_present(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """All events have required keys → no warning."""
+        data = [
+            {"title": "CPI", "date": "2026-01-01", "country": "USD", "impact": "High"},
+            {"title": "NFP", "date": "2026-01-02", "country": "USD", "impact": "High"},
+        ]
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        assert capsys.readouterr().out == ""
+
+    def test_warning_when_all_events_missing_keys(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """All sampled events missing required keys → warning is printed."""
+        data = [{"foo": "bar"}, {"baz": "qux"}]
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        out = capsys.readouterr().out
+        assert "Warning" in out
+        assert "FF JSON schema may have changed" in out
+
+    def test_warning_includes_missing_key_names(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Warning message lists the specific missing key names."""
+        data = [{"foo": "bar"}]  # all required keys absent
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        out = capsys.readouterr().out
+        for key in ("title", "date", "country", "impact"):
+            assert key in out
+
+    def test_no_warning_below_threshold(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Only 1 of 4 events missing keys → below 50% threshold, no warning."""
+        valid = {"title": "CPI", "date": "2026-01-01", "country": "USD", "impact": "High"}
+        data = [valid, valid, valid, {"foo": "bar"}]
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        assert capsys.readouterr().out == ""
+
+    def test_warning_exactly_at_threshold(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Exactly 50% missing → warning is emitted (>= threshold)."""
+        valid = {"title": "CPI", "date": "2026-01-01", "country": "USD", "impact": "High"}
+        data = [valid, {"foo": "bar"}]  # 1/2 = 50%
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        assert "Warning" in capsys.readouterr().out
+
+    def test_non_dict_entries_emit_different_warning(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Non-dict entries (e.g. strings) in data → schema-change warning."""
+        data = ["not a dict", 42, None]  # type: ignore[list-item]
+        ForexFactoryFetcher._validate_ff_json_schema(data)
+        assert "Warning" in capsys.readouterr().out
+
+    def test_fetch_ff_json_calls_validate_on_success(self) -> None:
+        """_fetch_ff_json() calls _validate_ff_json_schema() when data is a list."""
+        data = [{"title": "CPI", "date": "2026-01-01", "country": "USD", "impact": "High"}]
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(data).encode()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("urllib.request.urlopen", return_value=mock_response),
+            patch.object(ForexFactoryFetcher, "_validate_ff_json_schema") as mock_validate,
+        ):
+            result = ForexFactoryFetcher._fetch_ff_json()
+
+        mock_validate.assert_called_once_with(data)
+        assert result == data
+
+    def test_fetch_ff_json_returns_empty_on_non_list_response(self) -> None:
+        """_fetch_ff_json() returns [] when JSON root is not a list."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"error": "bad"}).encode()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            result = ForexFactoryFetcher._fetch_ff_json()
+
+        assert result == []
