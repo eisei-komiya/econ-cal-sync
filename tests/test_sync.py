@@ -426,3 +426,104 @@ class TestUpsertEvent:
         )
 
         assert result == "failed"
+
+
+class TestGetExistingEvents:
+    """Tests for get_existing_events error handling and pagination."""
+
+    _EXT_KEY = "econ_event_id"
+
+    def _make_item(self, eid: str, gcal_id: str) -> dict:
+        return {
+            "id": gcal_id,
+            "extendedProperties": {"private": {self._EXT_KEY: eid}},
+        }
+
+    def _make_service(self, pages: list[list[dict]], error_on_page: int | None = None) -> MagicMock:
+        """Build a mock service that returns paginated results.
+
+        If error_on_page is set, the call for that page index (0-based) raises an exception.
+        """
+        service = MagicMock()
+        responses = []
+        for i, items in enumerate(pages):
+            if error_on_page is not None and i == error_on_page:
+                responses.append(Exception(f"API error on page {i}"))
+            else:
+                next_token = f"token_{i+1}" if i < len(pages) - 1 else None
+                resp = {"items": items}
+                if next_token:
+                    resp["nextPageToken"] = next_token
+                responses.append(resp)
+
+        call_count = {"n": 0}
+        original_execute = service.events().list().execute
+
+        def side_effect_execute(*args, **kwargs):
+            n = call_count["n"]
+            call_count["n"] += 1
+            r = responses[n]
+            if isinstance(r, Exception):
+                raise r
+            return r
+
+        service.events().list().execute.side_effect = side_effect_execute
+        return service
+
+    def test_single_page_returns_mapping(self) -> None:
+        """Single page with two events → both are in the mapping."""
+        from src.sync import get_existing_events
+
+        items = [self._make_item("ev1", "gcal1"), self._make_item("ev2", "gcal2")]
+        service = self._make_service([items])
+
+        result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
+
+        assert result == {"ev1": "gcal1", "ev2": "gcal2"}
+
+    def test_multiple_pages_returns_all_events(self) -> None:
+        """Multi-page response → events from all pages are collected."""
+        from src.sync import get_existing_events
+
+        page1 = [self._make_item("ev1", "gcal1")]
+        page2 = [self._make_item("ev2", "gcal2")]
+        service = self._make_service([page1, page2])
+
+        result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
+
+        assert result == {"ev1": "gcal1", "ev2": "gcal2"}
+
+    def test_api_error_on_first_page_returns_empty(self) -> None:
+        """API error on the first page → returns empty dict without raising."""
+        from src.sync import get_existing_events
+
+        service = self._make_service([[], []], error_on_page=0)
+
+        result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
+
+        assert result == {}
+
+    def test_api_error_on_second_page_returns_partial(self) -> None:
+        """API error mid-pagination → returns whatever was collected before the error."""
+        from src.sync import get_existing_events
+
+        page1 = [self._make_item("ev1", "gcal1")]
+        service = self._make_service([page1, []], error_on_page=1)
+
+        result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
+
+        assert result == {"ev1": "gcal1"}
+
+    def test_items_without_ext_prop_are_ignored(self) -> None:
+        """Events missing the extendedProperties key are silently skipped."""
+        from src.sync import get_existing_events
+
+        items = [
+            {"id": "gcal1"},  # no extendedProperties at all
+            self._make_item("ev2", "gcal2"),
+        ]
+        service = self._make_service([items])
+
+        result = get_existing_events(service, "cal_id", "2026-01-01", "2026-01-31")
+
+        assert result == {"ev2": "gcal2"}

@@ -140,17 +140,22 @@ def get_existing_events(
     page_token = None
 
     while True:
-        result = (
-            service.events()
-            .list(
-                calendarId=calendar_id,
-                timeMin=time_min,
-                timeMax=time_max,
-                singleEvents=True,
-                pageToken=page_token,
+        try:
+            result = (
+                service.events()
+                .list(
+                    calendarId=calendar_id,
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    singleEvents=True,
+                    pageToken=page_token,
+                )
+                .execute()
             )
-            .execute()
-        )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[get_existing_events] API error: {exc}")
+            break  # 取得済み分だけで続行（重複作成を最小限に抑える）
+
         for item in result.get("items", []):
             eid = (
                 item.get("extendedProperties", {})
