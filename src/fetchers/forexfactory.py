@@ -26,6 +26,12 @@ _IMPACT_MAP: dict[str, int] = {
     "high": 3,
 }
 
+# Required keys expected in each FF JSON event dict.
+_FF_JSON_REQUIRED_KEYS: frozenset[str] = frozenset({"title", "date", "country", "impact"})
+
+# If this fraction or more of sampled events are missing required keys, emit a warning.
+_FF_JSON_SCHEMA_WARN_THRESHOLD: float = 0.5
+
 
 class ForexFactoryFetcher(BaseFetcher):
     """Fetch economic calendar data from ForexFactory."""
@@ -86,6 +92,43 @@ class ForexFactoryFetcher(BaseFetcher):
     # ------------------------------------------------------------------ #
 
     @staticmethod
+    def _validate_ff_json_schema(data: list[dict], *, sample_size: int = 5) -> None:
+        """Warn if the FF JSON schema appears to have changed.
+
+        Samples the first *sample_size* events and checks whether each contains
+        all required keys (``title``, ``date``, ``country``, ``impact``).
+        If at least :data:`_FF_JSON_SCHEMA_WARN_THRESHOLD` of the sample is
+        missing one or more keys, a warning is printed so that operators are
+        alerted to a potential upstream schema change before events are
+        silently dropped.
+
+        This is a best-effort check and does **not** raise; callers must not
+        rely on it for control flow.
+        """
+        if not data:
+            return
+        sample = [ev for ev in data[:sample_size] if isinstance(ev, dict)]
+        if not sample:
+            print(
+                "[forexfactory] Warning: FF JSON contains non-dict entries; "
+                "schema may have changed."
+            )
+            return
+        missing_counts = sum(
+            1 for ev in sample if not _FF_JSON_REQUIRED_KEYS.issubset(ev.keys())
+        )
+        if missing_counts / len(sample) >= _FF_JSON_SCHEMA_WARN_THRESHOLD:
+            # Collect the union of all missing keys across the sample for diagnostics.
+            missing_keys: set[str] = set()
+            for ev in sample:
+                missing_keys |= _FF_JSON_REQUIRED_KEYS - ev.keys()
+            print(
+                f"[forexfactory] Warning: FF JSON schema may have changed. "
+                f"Missing keys in {missing_counts}/{len(sample)} sampled events: "
+                f"{sorted(missing_keys)}"
+            )
+
+    @staticmethod
     def _fetch_ff_json() -> list[dict]:
         """Download the official FF this-week JSON."""
         try:
@@ -98,7 +141,10 @@ class ForexFactoryFetcher(BaseFetcher):
             )
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 data = json.loads(resp.read())
-            return data if isinstance(data, list) else []
+            if not isinstance(data, list):
+                return []
+            ForexFactoryFetcher._validate_ff_json_schema(data)
+            return data
         except Exception as exc:  # noqa: BLE001
             print(f"[forexfactory] FF JSON fetch failed: {exc}")
             return []
