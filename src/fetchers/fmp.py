@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from ..models import EconomicEvent
@@ -75,6 +76,7 @@ class FMPFetcher(BaseFetcher):
             return []
 
         results: list[EconomicEvent] = []
+        seen_ids: dict[str, int] = {}
         for raw in data:
             ccy = _COUNTRY_TO_CCY.get((raw.get("country") or "").upper(), "")
             if ccy not in countries:
@@ -85,7 +87,15 @@ class FMPFetcher(BaseFetcher):
             dt = self._parse_date(raw.get("date") or "")
             if dt is None:
                 continue
-            results.append(self._normalise(raw, dt, ccy))
+            event = self._normalise(raw, dt, ccy)
+            base_id = event.id
+            if base_id in seen_ids:
+                seen_ids[base_id] += 1
+                # Replace the id field with a suffixed version to avoid collision.
+                event = replace(event, id=f"{base_id}_{seen_ids[base_id]}")
+            else:
+                seen_ids[base_id] = 0
+            results.append(event)
 
         return results
 
@@ -108,7 +118,7 @@ class FMPFetcher(BaseFetcher):
     @staticmethod
     def _normalise(raw: dict, dt_utc: datetime, ccy: str) -> EconomicEvent:
         event_name = (raw.get("event") or "Economic Event").strip()
-        eid = f"fmp_{event_name}_{dt_utc.strftime('%Y%m%dT%H%M%S')}"
+        eid = f"fmp_{ccy}_{event_name}_{dt_utc.strftime('%Y%m%dT%H%M%S')}"
         return EconomicEvent(
             id=eid,
             name=event_name,

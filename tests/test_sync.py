@@ -610,3 +610,44 @@ class TestValidateFFJsonSchema:
             result = ForexFactoryFetcher._fetch_ff_json()
 
         assert result == []
+
+
+class TestFMPFetcherNormalise:
+    """Tests for FMPFetcher._normalise and ID collision handling."""
+
+    def test_normalise_id_includes_ccy(self) -> None:
+        """ID should include the currency code to distinguish same-name events."""
+        from src.fetchers.fmp import FMPFetcher
+
+        raw = {"event": "CPI", "country": "US", "impact": "High", "date": "2026-01-01T12:00:00"}
+        dt = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        event = FMPFetcher._normalise(raw, dt, "USD")
+        assert "USD" in event.id
+        assert event.id == "fmp_USD_CPI_20260101T120000"
+
+    def test_fetch_deduplicates_ids_with_suffix(self) -> None:
+        """Duplicate IDs within same fetch → suffixed with _1, _2, etc."""
+        from src.fetchers.fmp import FMPFetcher
+
+        # Two events: same name, same time, same country
+        data = [
+            {"event": "CPI", "country": "US", "impact": "high", "date": "2026-01-01T12:00:00"},
+            {"event": "CPI", "country": "US", "impact": "high", "date": "2026-01-01T12:00:00"},
+        ]
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(data).encode()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("urllib.request.urlopen", return_value=mock_response),
+            patch.dict("os.environ", {"FMP_API_KEY": "test_key"}),
+        ):
+            fetcher = FMPFetcher()
+            results = fetcher.fetch("2026-01-01", "2026-01-07", countries={"USD"}, importance_min=1)
+
+        assert len(results) == 2
+        ids = [e.id for e in results]
+        assert len(set(ids)) == 2, f"IDs should be unique, got: {ids}"
+        assert ids[0] == "fmp_USD_CPI_20260101T120000"
+        assert ids[1] == "fmp_USD_CPI_20260101T120000_1"
