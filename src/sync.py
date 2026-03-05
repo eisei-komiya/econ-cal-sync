@@ -57,7 +57,12 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 def build_calendar_service():
     """Return an authenticated Google Calendar service using a service account."""
-    sa_json = os.environ["GOOGLE_SA_JSON"]
+    sa_json = os.environ.get("GOOGLE_SA_JSON")
+    if not sa_json:
+        raise RuntimeError(
+            "GOOGLE_SA_JSON environment variable is not set. "
+            "Set it to the service account JSON content."
+        )
     sa_info = json.loads(sa_json)
     credentials = service_account.Credentials.from_service_account_info(
         sa_info, scopes=SCOPES,
@@ -205,7 +210,12 @@ def upsert_event(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    calendar_id = os.environ["GOOGLE_CALENDAR_ID"]
+    calendar_id = os.environ.get("GOOGLE_CALENDAR_ID")
+    if not calendar_id:
+        raise RuntimeError(
+            "GOOGLE_CALENDAR_ID environment variable is not set. "
+            "Set it to the target Google Calendar ID."
+        )
     source_name = os.environ.get("EVENT_SOURCE", "forexfactory")
     # Optional: calendar owner email for attendee-based reminder delivery.
     # Service-account-created events only fire reminders for the service account

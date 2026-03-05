@@ -651,3 +651,28 @@ class TestFMPFetcherNormalise:
         assert len(set(ids)) == 2, f"IDs should be unique, got: {ids}"
         assert ids[0] == "fmp_USD_CPI_20260101T120000"
         assert ids[1] == "fmp_USD_CPI_20260101T120000_1"
+
+
+class TestEnvVarValidation:
+    """Tests for explicit error messages when required env vars are missing."""
+
+    def test_build_calendar_service_raises_on_missing_sa_json(self) -> None:
+        """build_calendar_service should raise RuntimeError with helpful message."""
+        import os
+        from src.sync import build_calendar_service
+
+        env = {k: v for k, v in os.environ.items() if k != "GOOGLE_SA_JSON"}
+        with patch.dict("os.environ", env, clear=True):
+            with pytest.raises(RuntimeError, match="GOOGLE_SA_JSON"):
+                build_calendar_service()
+
+    def test_main_raises_on_missing_calendar_id(self) -> None:
+        """main() should raise RuntimeError with helpful message when GOOGLE_CALENDAR_ID is absent."""
+        import os
+        from src.sync import main
+
+        env = {k: v for k, v in os.environ.items() if k != "GOOGLE_CALENDAR_ID"}
+        env["GOOGLE_SA_JSON"] = "{}"  # prevent SA_JSON error first
+        with patch.dict("os.environ", env, clear=True):
+            with pytest.raises(RuntimeError, match="GOOGLE_CALENDAR_ID"):
+                main()
