@@ -56,13 +56,12 @@ class FMPFetcher(BaseFetcher):
             print("[fmp] FMP_API_KEY not set – skipping.")
             return []
 
-        url = f"{_FMP_BASE}?from={date_from}&to={date_to}"
+        url = f"{_FMP_BASE}?from={date_from}&to={date_to}&apikey={api_key}"
         try:
             req = urllib.request.Request(
                 url,
                 headers={
                     "Accept": "application/json",
-                    "apikey": api_key,
                 },
             )
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
