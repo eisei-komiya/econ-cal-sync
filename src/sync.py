@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 from google.oauth2 import service_account
@@ -49,6 +50,38 @@ _IMPORTANCE_STARS: dict[int, str] = {
 _EXT_PROP_KEY = "econ_event_id"
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+# ---------------------------------------------------------------------------
+# Retry / back-off helper
+# ---------------------------------------------------------------------------
+
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 4
+_BACKOFF_BASE = 2.0  # seconds
+
+
+def _call_with_retry(request_callable, *, max_retries: int = _MAX_RETRIES) -> dict:
+    """Execute a Google API request with exponential back-off on transient errors.
+
+    ``request_callable`` must be a zero-argument callable that invokes
+    ``<resource>.execute()`` and returns the response dict.
+
+    Raises the last exception when all retries are exhausted.
+    """
+    import googleapiclient.errors  # local import to keep top-level imports clean
+
+    for attempt in range(max_retries + 1):
+        try:
+            return request_callable()
+        except googleapiclient.errors.HttpError as exc:
+            status = exc.status_code if hasattr(exc, "status_code") else exc.resp.status
+            if status not in _RETRYABLE_STATUS_CODES or attempt == max_retries:
+                raise
+            wait = _BACKOFF_BASE ** attempt
+            print(f"  [retry] HTTP {status}, waiting {wait:.0f}s (attempt {attempt + 1}/{max_retries})")
+            time.sleep(wait)
+        except Exception:
+            raise  # non-HTTP errors are not retried
 
 
 # ---------------------------------------------------------------------------
@@ -146,19 +179,19 @@ def get_existing_events(
 
     while True:
         try:
-            result = (
-                service.events()
+            result = _call_with_retry(
+                lambda pt=page_token: service.events()
                 .list(
                     calendarId=calendar_id,
                     timeMin=time_min,
                     timeMax=time_max,
                     singleEvents=True,
-                    pageToken=page_token,
+                    pageToken=pt,
                 )
                 .execute()
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"[get_existing_events] API error: {exc}")
+            print(f"[get_existing_events] API error after retries: {exc}")
             break  # 取得済み分だけで続行（重複作成を最小限に抑える）
 
         for item in result.get("items", []):
@@ -188,17 +221,21 @@ def upsert_event(
     eid = gcal_event["extendedProperties"]["private"][_EXT_PROP_KEY]
     try:
         if eid in existing:
-            service.events().update(
-                calendarId=calendar_id,
-                eventId=existing[eid],
-                body=gcal_event,
-            ).execute()
+            _call_with_retry(
+                lambda: service.events().update(
+                    calendarId=calendar_id,
+                    eventId=existing[eid],
+                    body=gcal_event,
+                ).execute()
+            )
             return "updated"
         else:
-            service.events().insert(
-                calendarId=calendar_id,
-                body=gcal_event,
-            ).execute()
+            _call_with_retry(
+                lambda: service.events().insert(
+                    calendarId=calendar_id,
+                    body=gcal_event,
+                ).execute()
+            )
             return "created"
     except Exception as exc:  # noqa: BLE001
         print(f"  [failed] {gcal_event.get('summary', eid)}: {exc}")

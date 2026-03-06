@@ -676,3 +676,80 @@ class TestEnvVarValidation:
         with patch.dict("os.environ", env, clear=True):
             with pytest.raises(RuntimeError, match="GOOGLE_CALENDAR_ID"):
                 main()
+
+
+class TestCallWithRetry:
+    """Tests for the _call_with_retry helper."""
+
+    def test_succeeds_on_first_attempt(self) -> None:
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def success():
+            nonlocal call_count
+            call_count += 1
+            return {"ok": True}
+
+        result = _call_with_retry(success)
+        assert result == {"ok": True}
+        assert call_count == 1
+
+    def test_retries_on_429_then_succeeds(self) -> None:
+        """Should retry on 429 and eventually succeed."""
+        import googleapiclient.errors
+        from unittest.mock import MagicMock
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                resp = MagicMock()
+                resp.status = 429
+                raise googleapiclient.errors.HttpError(resp=resp, content=b"rate limited")
+            return {"ok": True}
+
+        with patch("time.sleep"):  # don't actually sleep in tests
+            result = _call_with_retry(flaky, max_retries=4)
+
+        assert result == {"ok": True}
+        assert call_count == 3
+
+    def test_raises_after_max_retries_exhausted(self) -> None:
+        """Should raise the last exception when retries are exhausted."""
+        import googleapiclient.errors
+        from unittest.mock import MagicMock
+        from src.sync import _call_with_retry
+
+        resp = MagicMock()
+        resp.status = 503
+
+        def always_fails():
+            raise googleapiclient.errors.HttpError(resp=resp, content=b"unavailable")
+
+        with patch("time.sleep"):
+            with pytest.raises(googleapiclient.errors.HttpError):
+                _call_with_retry(always_fails, max_retries=2)
+
+    def test_does_not_retry_on_non_retryable_status(self) -> None:
+        """Should not retry on 4xx errors that are not in the retryable set."""
+        import googleapiclient.errors
+        from unittest.mock import MagicMock
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def not_found():
+            nonlocal call_count
+            call_count += 1
+            resp = MagicMock()
+            resp.status = 404
+            raise googleapiclient.errors.HttpError(resp=resp, content=b"not found")
+
+        with pytest.raises(googleapiclient.errors.HttpError):
+            _call_with_retry(not_found, max_retries=3)
+
+        assert call_count == 1  # no retry
