@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 
 from ..models import EconomicEvent
@@ -31,6 +32,9 @@ _FF_JSON_REQUIRED_KEYS: frozenset[str] = frozenset({"title", "date", "country", 
 
 # If this fraction or more of sampled events are missing required keys, emit a warning.
 _FF_JSON_SCHEMA_WARN_THRESHOLD: float = 0.5
+
+# Timeout (seconds) for the market-calendar-tool scrape call.
+_MCT_SCRAPE_TIMEOUT: int = 60
 
 
 class ForexFactoryFetcher(BaseFetcher):
@@ -161,13 +165,24 @@ class ForexFactoryFetcher(BaseFetcher):
             )
             return []
 
-        try:
+        def _scrape() -> list[dict]:
             raw = scrape_calendar(date_from=date_from, date_to=date_to)
             cleaned = clean_calendar_data(raw)
             df = cleaned.base
             if df is None or df.empty:
                 return []
             return df.to_dict(orient="records")  # type: ignore[union-attr]
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_scrape)
+                return future.result(timeout=_MCT_SCRAPE_TIMEOUT)
+        except FuturesTimeoutError:
+            print(
+                f"[forexfactory] market-calendar-tool scrape timed out "
+                f"after {_MCT_SCRAPE_TIMEOUT}s; skipping."
+            )
+            return []
         except Exception as exc:  # noqa: BLE001
             print(f"[forexfactory] market-calendar-tool scrape failed: {exc}")
             return []
