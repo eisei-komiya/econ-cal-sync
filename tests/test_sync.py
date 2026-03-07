@@ -612,6 +612,37 @@ class TestValidateFFJsonSchema:
         assert result == []
 
 
+class TestForexFactoryFetcherMCTTimeout:
+    """Tests for the timeout guard around market-calendar-tool scrape."""
+
+    def test_fetch_mct_returns_empty_on_timeout(self, capsys) -> None:
+        """_fetch_mct should return [] and log a warning when scrape times out."""
+        from src.fetchers.forexfactory import ForexFactoryFetcher
+        from concurrent.futures import Future, TimeoutError as FuturesTimeoutError
+
+        # Simulate a future that raises TimeoutError when result() is called.
+        mock_future = MagicMock(spec=Future)
+        mock_future.result.side_effect = FuturesTimeoutError()
+
+        mock_executor = MagicMock()
+        mock_executor.__enter__ = lambda s: s
+        mock_executor.__exit__ = MagicMock(return_value=False)
+        mock_executor.submit = MagicMock(return_value=mock_future)
+
+        mock_mct = MagicMock()
+        mock_mct.scrape_calendar = MagicMock()
+        mock_mct.clean_calendar_data = MagicMock()
+
+        with (
+            patch.dict("sys.modules", {"market_calendar_tool": mock_mct}),
+            patch("src.fetchers.forexfactory.ThreadPoolExecutor", return_value=mock_executor),
+        ):
+            result = ForexFactoryFetcher._fetch_mct("2026-01-01", "2026-01-07")
+
+        assert result == []
+        captured = capsys.readouterr()
+        assert "timed out" in captured.out
+
 class TestFMPFetcherNormalise:
     """Tests for FMPFetcher._normalise and ID collision handling."""
 
