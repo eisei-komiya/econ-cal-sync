@@ -652,6 +652,35 @@ class TestFMPFetcherNormalise:
         assert ids[0] == "fmp_USD_CPI_20260101T120000"
         assert ids[1] == "fmp_USD_CPI_20260101T120000_1"
 
+    def test_fetch_sends_apikey_as_query_param(self) -> None:
+        """API key must be passed as query parameter, not as a request header."""
+        from src.fetchers.fmp import FMPFetcher
+
+        captured_requests: list = []
+
+        def mock_urlopen(req, timeout=None):
+            captured_requests.append(req)
+            mock_response = MagicMock()
+            mock_response.read.return_value = b"[]"
+            mock_response.__enter__ = lambda s: s
+            mock_response.__exit__ = MagicMock(return_value=False)
+            return mock_response
+
+        with (
+            patch("urllib.request.urlopen", side_effect=mock_urlopen),
+            patch.dict("os.environ", {"FMP_API_KEY": "secret123"}),
+        ):
+            FMPFetcher().fetch("2026-01-01", "2026-01-07", countries={"USD"}, importance_min=1)
+
+        assert len(captured_requests) == 1
+        req = captured_requests[0]
+        assert "apikey=secret123" in req.full_url, (
+            f"API key should be in query params, got URL: {req.full_url}"
+        )
+        assert "apikey" not in (req.headers or {}), (
+            "API key should NOT be sent as a header"
+        )
+
 
 class TestEnvVarValidation:
     """Tests for explicit error messages when required env vars are missing."""
