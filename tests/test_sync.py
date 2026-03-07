@@ -813,3 +813,32 @@ class TestCallWithRetry:
             _call_with_retry(not_found, max_retries=3)
 
         assert call_count == 1  # no retry
+
+
+class TestMainEmptyEvents:
+    """Tests for main() behavior when no events are retrieved."""
+
+    def test_main_returns_gracefully_when_no_events(self, capsys) -> None:
+        """main() should log a warning and return (not raise) when fetcher returns []."""
+        import os
+        from src.sync import main
+
+        env = {
+            "GOOGLE_CALENDAR_ID": "test@group.calendar.google.com",
+            "EVENT_SOURCE": "forexfactory",
+            "GOOGLE_SA_JSON": "{}",
+        }
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.name = "ForexFactory"
+        mock_fetcher.fetch.return_value = []
+
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch("src.sync.get_fetcher", return_value=mock_fetcher),
+        ):
+            # Should NOT raise RuntimeError
+            main()
+
+        captured = capsys.readouterr()
+        assert "No events retrieved" in captured.out or "Skipping" in captured.out
