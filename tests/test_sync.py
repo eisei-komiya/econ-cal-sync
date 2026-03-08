@@ -842,3 +842,108 @@ class TestMainEmptyEvents:
 
         captured = capsys.readouterr()
         assert "No events retrieved" in captured.out or "Skipping" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# FMPFetcher retry tests
+# ---------------------------------------------------------------------------
+
+class TestFMPFetcherRetry:
+    """Tests for FMPFetcher._fetch_with_retry() exponential back-off."""
+
+    def test_success_on_first_attempt(self) -> None:
+        """Returns parsed JSON list when request succeeds immediately."""
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.request
+        import io
+
+        fetcher = FMPFetcher()
+        payload = b'[{"event": "CPI", "country": "US"}]'
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = payload
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            req = urllib.request.Request("https://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result == [{"event": "CPI", "country": "US"}]
+
+    def test_retries_on_429_then_succeeds(self, capsys) -> None:
+        """Retries on HTTP 429 and returns data on subsequent success."""
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.error
+        import urllib.request
+
+        fetcher = FMPFetcher()
+        payload = b'[{"event": "NFP", "country": "US"}]'
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = payload
+
+        call_count = 0
+
+        def urlopen_side_effect(req, timeout):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise urllib.error.HTTPError(None, 429, "Too Many Requests", {}, None)
+            return mock_resp
+
+        with (
+            patch("urllib.request.urlopen", side_effect=urlopen_side_effect),
+            patch("time.sleep"),
+        ):
+            req = urllib.request.Request("https://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result == [{"event": "NFP", "country": "US"}]
+        assert call_count == 2
+
+    def test_returns_none_after_all_retries_exhausted(self, capsys) -> None:
+        """Returns None when all retries fail with 429."""
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.error
+        import urllib.request
+
+        fetcher = FMPFetcher()
+
+        def urlopen_side_effect(req, timeout):
+            raise urllib.error.HTTPError(None, 429, "Too Many Requests", {}, None)
+
+        with (
+            patch("urllib.request.urlopen", side_effect=urlopen_side_effect),
+            patch("time.sleep"),
+        ):
+            req = urllib.request.Request("https://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result is None
+
+    def test_non_retryable_http_error_returns_none_immediately(self, capsys) -> None:
+        """Returns None immediately on 401 without retrying."""
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.error
+        import urllib.request
+
+        fetcher = FMPFetcher()
+        call_count = 0
+
+        def urlopen_side_effect(req, timeout):
+            nonlocal call_count
+            call_count += 1
+            raise urllib.error.HTTPError(None, 401, "Unauthorized", {}, None)
+
+        with (
+            patch("urllib.request.urlopen", side_effect=urlopen_side_effect),
+            patch("time.sleep"),
+        ):
+            req = urllib.request.Request("https://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result is None
+        assert call_count == 1  # no retry on 401
