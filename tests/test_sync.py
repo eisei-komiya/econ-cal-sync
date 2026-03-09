@@ -1047,3 +1047,52 @@ class TestForexFactoryFetcherRetry:
 
         assert result is None
         assert call_count == 1  # no retry on 401
+
+
+# ---------------------------------------------------------------------------
+# Issue #56 — failed events should not raise RuntimeError
+# ---------------------------------------------------------------------------
+
+class TestMainFailedEventsNoRaise:
+    """Tests for main() behavior when some upsert_event calls return 'failed'."""
+
+    def test_main_does_not_raise_when_some_events_fail(self, capsys) -> None:
+        """main() should log a WARNING (not raise RuntimeError) when some events fail."""
+        from src.sync import main
+
+        env = {
+            "GOOGLE_CALENDAR_ID": "test@group.calendar.google.com",
+            "EVENT_SOURCE": "forexfactory",
+            "GOOGLE_SA_JSON": json.dumps({"type": "service_account"}),
+        }
+
+        sample_event = {
+            "title": "CPI",
+            "country": "US",
+            "impact": 3,
+            "dt": "2026-03-10T08:30:00+00:00",
+            "forecast": "0.3%",
+            "previous": "0.2%",
+            "source": "ff",
+        }
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.name = "ForexFactory"
+        mock_fetcher.fetch.return_value = [sample_event]
+
+        mock_gcal_event = {"summary": "CPI", "start": {}, "end": {}}
+
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch("src.sync.get_fetcher", return_value=mock_fetcher),
+            patch("src.sync.build_calendar_service", return_value=MagicMock()),
+            patch("src.sync.get_existing_events", return_value={}),
+            patch("src.sync.build_gcal_event", return_value=mock_gcal_event),
+            patch("src.sync.upsert_event", return_value="failed"),
+        ):
+            # Should NOT raise RuntimeError
+            main()
+
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "1" in captured.out
