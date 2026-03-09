@@ -301,8 +301,8 @@ def main() -> None:
 
     print(f"Done. Created: {created}, Updated: {updated}, Failed: {failed}")
     if failed:
-        raise RuntimeError(
-            f"{failed} event(s) could not be upserted. "
+        print(
+            f"[sync] WARNING: {failed} event(s) could not be upserted. "
             "Check the logs above for details."
         )
 
