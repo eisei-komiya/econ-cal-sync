@@ -1096,3 +1096,57 @@ class TestMainFailedEventsNoRaise:
         captured = capsys.readouterr()
         assert "WARNING" in captured.out
         assert "1" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Issue #55 — get_existing_events() pagination should have a safety cap
+# ---------------------------------------------------------------------------
+
+class TestGetExistingEventsPaginationLimit:
+    """Tests for the MAX_PAGINATION_PAGES safety cap in get_existing_events()."""
+
+    def _make_page(self, n: int, has_next: bool) -> dict:
+        return {
+            "items": [
+                {
+                    "id": f"gcal-{n}-{i}",
+                    "extendedProperties": {"private": {"econ_event_id": f"eid-{n}-{i}"}},
+                }
+                for i in range(2)
+            ],
+            **({"nextPageToken": f"token-{n+1}"} if has_next else {}),
+        }
+
+    def test_stops_at_max_pages(self, capsys) -> None:
+        """get_existing_events() must stop and warn after MAX_PAGINATION_PAGES pages."""
+        from src.sync import get_existing_events, _MAX_PAGINATION_PAGES
+
+        call_count = 0
+
+        def fake_call(fn):
+            nonlocal call_count
+            call_count += 1
+            # Always return a page with nextPageToken so the loop would run forever
+            return {
+                "items": [
+                    {
+                        "id": f"gcal-{call_count}",
+                        "extendedProperties": {
+                            "private": {"econ_event_id": f"eid-{call_count}"}
+                        },
+                    }
+                ],
+                "nextPageToken": f"token-{call_count+1}",
+            }
+
+        with patch("src.sync._call_with_retry", side_effect=fake_call):
+            result = get_existing_events(
+                MagicMock(), "cal@example.com", "2026-01-01", "2026-12-31"
+            )
+
+        assert call_count == _MAX_PAGINATION_PAGES
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "pagination limit" in captured.out
+        # All fetched events should be present
+        assert len(result) == _MAX_PAGINATION_PAGES
