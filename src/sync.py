@@ -153,6 +153,9 @@ def build_gcal_event(ev: EconomicEvent) -> dict:
     return gcal
 
 
+_MAX_PAGINATION_PAGES = 50  # safety cap: 50 pages × 2500 events/page = 125,000 events
+
+
 def get_existing_events(
     service, calendar_id: str, date_from: str, date_to: str,
 ) -> dict[str, str]:
@@ -161,8 +164,15 @@ def get_existing_events(
     time_min = f"{date_from}T00:00:00Z"
     time_max = f"{date_to}T23:59:59Z"
     page_token = None
+    pages_fetched = 0
 
     while True:
+        if pages_fetched >= _MAX_PAGINATION_PAGES:
+            print(
+                f"[get_existing_events] WARNING: reached pagination limit "
+                f"({_MAX_PAGINATION_PAGES} pages). Stopping early."
+            )
+            break
         try:
             result = _call_with_retry(
                 lambda pt=page_token: service.events()
@@ -179,6 +189,7 @@ def get_existing_events(
             print(f"[get_existing_events] API error after retries: {exc}")
             break  # 取得済み分だけで続行（重複作成を最小限に抑える）
 
+        pages_fetched += 1
         for item in result.get("items", []):
             eid = (
                 item.get("extendedProperties", {})
