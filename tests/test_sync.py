@@ -1131,3 +1131,87 @@ class TestGetExistingEventsPaginationLimit:
         assert "pagination limit" in captured.out
         # All fetched events should be present
         assert len(result) == _MAX_PAGINATION_PAGES
+
+
+# ---------------------------------------------------------------------------
+# Issue #62 — _call_with_retry() should retry on network-level errors
+# ---------------------------------------------------------------------------
+
+class TestCallWithRetryNetworkErrors:
+    """Tests that _call_with_retry() retries on socket/connection errors."""
+
+    def test_retries_on_socket_timeout(self) -> None:
+        """socket.timeout should be retried."""
+        import socket
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise socket.timeout("timed out")
+            return {"ok": True}
+
+        with patch("time.sleep"):
+            result = _call_with_retry(flaky, max_retries=4)
+
+        assert result == {"ok": True}
+        assert call_count == 3
+
+    def test_retries_on_connection_error(self) -> None:
+        """ConnectionError (and subclasses) should be retried."""
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionResetError("connection reset by peer")
+            return {"ok": True}
+
+        with patch("time.sleep"):
+            result = _call_with_retry(flaky, max_retries=3)
+
+        assert result == {"ok": True}
+        assert call_count == 2
+
+    def test_raises_after_max_retries_on_network_error(self) -> None:
+        """Should raise after exhausting retries on persistent network errors."""
+        import socket
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def always_fails():
+            nonlocal call_count
+            call_count += 1
+            raise socket.timeout("always times out")
+
+        with patch("time.sleep"):
+            with pytest.raises(socket.timeout):
+                _call_with_retry(always_fails, max_retries=2)
+
+        assert call_count == 3  # initial + 2 retries
+
+    def test_retries_on_timeout_error(self) -> None:
+        """Built-in TimeoutError should be retried."""
+        from src.sync import _call_with_retry
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise TimeoutError("request timed out")
+            return {"ok": True}
+
+        with patch("time.sleep"):
+            result = _call_with_retry(flaky, max_retries=3)
+
+        assert result == {"ok": True}
+        assert call_count == 2

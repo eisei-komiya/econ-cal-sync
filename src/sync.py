@@ -66,9 +66,26 @@ def _call_with_retry(request_callable, *, max_retries: int = _MAX_RETRIES) -> di
     ``request_callable`` must be a zero-argument callable that invokes
     ``<resource>.execute()`` and returns the response dict.
 
+    Retried on:
+    - :class:`googleapiclient.errors.HttpError` with status in
+      ``_RETRYABLE_STATUS_CODES`` (429, 500, 502, 503, 504)
+    - Network-level transient errors: :class:`socket.timeout`,
+      :class:`ConnectionError`, :class:`TimeoutError`, and
+      :class:`OSError` (covers ``BrokenPipeError``, ``ConnectionResetError``,
+      etc.).
+
     Raises the last exception when all retries are exhausted.
     """
+    import socket
+
     import googleapiclient.errors  # local import to keep top-level imports clean
+
+    _RETRYABLE_NETWORK_ERRORS = (
+        socket.timeout,
+        ConnectionError,   # base class for BrokenPipeError, ConnectionResetError, etc.
+        TimeoutError,      # built-in; raised by some HTTP clients on connect/read timeout
+        OSError,           # catches remaining low-level socket errors
+    )
 
     for attempt in range(max_retries + 1):
         try:
@@ -80,8 +97,15 @@ def _call_with_retry(request_callable, *, max_retries: int = _MAX_RETRIES) -> di
             wait = _BACKOFF_BASE ** attempt
             print(f"  [retry] HTTP {status}, waiting {wait:.0f}s (attempt {attempt + 1}/{max_retries})")
             time.sleep(wait)
-        except Exception:
-            raise  # non-HTTP errors are not retried
+        except _RETRYABLE_NETWORK_ERRORS as exc:
+            if attempt == max_retries:
+                raise
+            wait = _BACKOFF_BASE ** attempt
+            print(
+                f"  [retry] network error ({type(exc).__name__}: {exc}), "
+                f"waiting {wait:.0f}s (attempt {attempt + 1}/{max_retries})"
+            )
+            time.sleep(wait)
 
 
 # ---------------------------------------------------------------------------
