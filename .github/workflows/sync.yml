@@ -25,4 +25,3 @@ jobs:
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
-          CALENDAR_OWNER_EMAIL: ${{ secrets.CALENDAR_OWNER_EMAIL }}
