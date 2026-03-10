@@ -1215,3 +1215,120 @@ class TestCallWithRetryNetworkErrors:
 
         assert result == {"ok": True}
         assert call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Issue #66 — fmp._fetch_with_retry() / forexfactory._fetch_with_retry()
+#              should retry on network-level errors
+# ---------------------------------------------------------------------------
+
+class TestFmpFetchWithRetryNetworkErrors:
+    """Tests that FMPFetcher._fetch_with_retry() retries on socket/connection errors."""
+
+    def test_retries_on_socket_timeout(self) -> None:
+        import socket
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.request
+
+        fetcher = FMPFetcher()
+        call_count = 0
+
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise socket.timeout("timed out")
+            import io
+            import json as _json
+
+            class FakeResp:
+                def read(self):
+                    return _json.dumps([]).encode()
+                def __enter__(self):
+                    return self
+                def __exit__(self, *a):
+                    pass
+
+            return FakeResp()
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), patch("time.sleep"):
+            req = urllib.request.Request("http://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result == []
+        assert call_count == 3
+
+    def test_raises_none_after_max_retries(self) -> None:
+        import socket
+        from src.fetchers.fmp import FMPFetcher
+        import urllib.request
+
+        fetcher = FMPFetcher()
+        call_count = 0
+
+        def always_fails(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            raise socket.timeout("always times out")
+
+        with patch("urllib.request.urlopen", side_effect=always_fails), patch("time.sleep"):
+            req = urllib.request.Request("http://example.com")
+            result = fetcher._fetch_with_retry(req)
+
+        assert result is None
+        assert call_count == 4  # initial + 3 retries (_MAX_RETRIES=3)
+
+
+class TestForexFactoryFetchWithRetryNetworkErrors:
+    """Tests that ForexFactoryFetcher._fetch_with_retry() retries on socket/connection errors."""
+
+    def test_retries_on_connection_error(self) -> None:
+        from src.fetchers.forexfactory import ForexFactoryFetcher
+        import urllib.request
+
+        call_count = 0
+
+        def fake_urlopen(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionResetError("connection reset by peer")
+            import json as _json
+
+            class FakeResp:
+                def read(self):
+                    return _json.dumps([]).encode()
+                def __enter__(self):
+                    return self
+                def __exit__(self, *a):
+                    pass
+
+            return FakeResp()
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), patch("time.sleep"):
+            req = urllib.request.Request("http://example.com")
+            result = ForexFactoryFetcher._fetch_with_retry(req)
+
+        assert result == []
+        assert call_count == 2
+
+    def test_returns_none_after_max_retries(self) -> None:
+        import socket
+        from src.fetchers.forexfactory import ForexFactoryFetcher
+        import urllib.request
+
+        call_count = 0
+
+        def always_fails(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            raise TimeoutError("always times out")
+
+        with patch("urllib.request.urlopen", side_effect=always_fails), patch("time.sleep"):
+            req = urllib.request.Request("http://example.com")
+            result = ForexFactoryFetcher._fetch_with_retry(req)
+
+        assert result is None
+        assert call_count == 4  # initial + 3 retries (_MAX_RETRIES=3)
