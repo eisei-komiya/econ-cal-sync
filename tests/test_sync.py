@@ -1395,3 +1395,43 @@ class TestFmpNormaliseImportance:
 
         assert len(events) == 1
         assert events[0].importance == 3  # "high" → 3
+
+
+# ---------------------------------------------------------------------------
+# Issue #69 — Invalid EVENT_SOURCE should raise RuntimeError, not KeyError
+# ---------------------------------------------------------------------------
+
+class TestInvalidEventSource:
+    """main() should raise RuntimeError (not KeyError) for unknown EVENT_SOURCE."""
+
+    def test_invalid_event_source_raises_runtime_error(self, monkeypatch) -> None:
+        import pytest
+        from src.sync import main
+        from unittest.mock import patch
+
+        monkeypatch.setenv("EVENT_SOURCE", "nonexistent_source")
+        monkeypatch.setenv("GOOGLE_SA_JSON", "{}")
+        monkeypatch.setenv("GOOGLE_CALENDAR_ID", "test@group.calendar.google.com")
+
+        with patch("src.sync.build_calendar_service"):
+            with pytest.raises(RuntimeError, match="Invalid EVENT_SOURCE"):
+                main()
+
+    def test_valid_event_source_does_not_raise(self, monkeypatch) -> None:
+        """forexfactory and fmp are valid sources and should not raise."""
+        from src.fetchers import get_fetcher
+
+        # Should not raise
+        fetcher = get_fetcher("forexfactory")
+        assert fetcher is not None
+
+        fetcher2 = get_fetcher("fmp")
+        assert fetcher2 is not None
+
+    def test_unknown_source_key_error_message(self) -> None:
+        """get_fetcher should include available sources in the error message."""
+        import pytest
+        from src.fetchers import get_fetcher
+
+        with pytest.raises(KeyError, match="forexfactory"):
+            get_fetcher("invalid_source")
