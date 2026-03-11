@@ -161,8 +161,25 @@ class ForexFactoryFetcher(BaseFetcher):
     def _fetch_with_retry(req: urllib.request.Request) -> list | None:
         """Execute an HTTP request with exponential back-off on 429/5xx errors.
 
+        Retried on:
+        - :class:`urllib.error.HTTPError` with status in
+          ``_RETRYABLE_STATUS_CODES`` (429, 500, 502, 503, 504)
+        - Network-level transient errors: :class:`socket.timeout`,
+          :class:`ConnectionError`, :class:`TimeoutError`, and
+          :class:`OSError` (covers ``BrokenPipeError``, ``ConnectionResetError``,
+          etc.).
+
         Returns the parsed JSON list on success, or ``None`` on failure.
         """
+        import socket
+
+        _RETRYABLE_NETWORK_ERRORS = (
+            socket.timeout,
+            ConnectionError,   # base class for BrokenPipeError, ConnectionResetError, etc.
+            TimeoutError,      # built-in; raised by some HTTP clients on connect/read timeout
+            OSError,           # catches remaining low-level socket errors
+        )
+
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
@@ -174,6 +191,16 @@ class ForexFactoryFetcher(BaseFetcher):
                 wait = _BACKOFF_BASE ** attempt
                 print(
                     f"  [forexfactory retry] HTTP {exc.code}, "
+                    f"waiting {wait:.0f}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                )
+                time.sleep(wait)
+            except _RETRYABLE_NETWORK_ERRORS as exc:
+                if attempt == _MAX_RETRIES:
+                    print(f"[forexfactory] FF JSON fetch failed: {exc}")
+                    return None
+                wait = _BACKOFF_BASE ** attempt
+                print(
+                    f"  [forexfactory retry] network error ({type(exc).__name__}: {exc}), "
                     f"waiting {wait:.0f}s (attempt {attempt + 1}/{_MAX_RETRIES})"
                 )
                 time.sleep(wait)
