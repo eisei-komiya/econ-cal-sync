@@ -275,7 +275,12 @@ def main() -> None:
         )
     source_name = os.environ.get("EVENT_SOURCE", "forexfactory")
 
-    fetcher = get_fetcher(source_name)
+    try:
+        fetcher = get_fetcher(source_name)
+    except KeyError as exc:
+        raise RuntimeError(
+            f"Invalid EVENT_SOURCE environment variable: {exc}"
+        ) from exc
     print(f"Using data source: {fetcher.name}")
 
     today = datetime.now(timezone.utc).date()
