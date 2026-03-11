@@ -1332,3 +1332,66 @@ class TestForexFactoryFetchWithRetryNetworkErrors:
 
         assert result is None
         assert call_count == 4  # initial + 3 retries (_MAX_RETRIES=3)
+
+
+# ---------------------------------------------------------------------------
+# Issue #70 — FMPFetcher._normalise() should set importance field
+# ---------------------------------------------------------------------------
+
+class TestFmpNormaliseImportance:
+    """Tests that FMPFetcher._normalise() correctly sets the importance field."""
+
+    def test_importance_is_set_from_impact(self) -> None:
+        from datetime import datetime, timezone
+        from src.fetchers.fmp import FMPFetcher
+
+        dt = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        raw = {"event": "Non Farm Payrolls", "impact": "high"}
+
+        event = FMPFetcher._normalise(raw, dt, "USD", importance=3)
+
+        assert event.importance == 3
+
+    def test_importance_default_is_zero(self) -> None:
+        from datetime import datetime, timezone
+        from src.fetchers.fmp import FMPFetcher
+
+        dt = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        raw = {"event": "Some Event"}
+
+        event = FMPFetcher._normalise(raw, dt, "USD")
+
+        assert event.importance == 0
+
+    def test_fetch_propagates_importance_to_event(self) -> None:
+        """fetch() must pass the computed impact value through to _normalise()."""
+        import json
+        import os
+        from datetime import datetime, timezone
+        from src.fetchers.fmp import FMPFetcher
+        from unittest.mock import patch, MagicMock
+
+        fetcher = FMPFetcher()
+
+        fake_data = [
+            {
+                "event": "GDP",
+                "country": "US",
+                "impact": "high",
+                "date": "2025-01-15T12:00:00",
+                "estimate": "2.5%",
+                "previous": "2.0%",
+                "actual": "2.7%",
+            }
+        ]
+
+        with patch.object(fetcher, "_fetch_with_retry", return_value=fake_data), \
+             patch.dict(os.environ, {"FMP_API_KEY": "test_key"}):
+            events = fetcher.fetch(
+                "2025-01-15", "2025-01-15",
+                countries={"USD"},
+                importance_min=1,
+            )
+
+        assert len(events) == 1
+        assert events[0].importance == 3  # "high" → 3

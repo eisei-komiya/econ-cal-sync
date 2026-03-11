@@ -86,7 +86,7 @@ class FMPFetcher(BaseFetcher):
             dt = self._parse_date(raw.get("date") or "")
             if dt is None:
                 continue
-            event = self._normalise(raw, dt, ccy)
+            event = self._normalise(raw, dt, ccy, impact)
             base_id = event.id
             if base_id in seen_ids:
                 seen_ids[base_id] += 1
@@ -163,7 +163,7 @@ class FMPFetcher(BaseFetcher):
             return None
 
     @staticmethod
-    def _normalise(raw: dict, dt_utc: datetime, ccy: str) -> EconomicEvent:
+    def _normalise(raw: dict, dt_utc: datetime, ccy: str, importance: int = 0) -> EconomicEvent:
         event_name = (raw.get("event") or "Economic Event").strip()
         eid = f"fmp_{ccy}_{event_name}_{dt_utc.strftime('%Y%m%dT%H%M%S')}"
         return EconomicEvent(
@@ -176,4 +176,5 @@ class FMPFetcher(BaseFetcher):
             previous=str(raw.get("previous") or "N/A"),
             actual=str(raw.get("actual") or "N/A"),
             currency=ccy,
+            importance=importance,
         )
